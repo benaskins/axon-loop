@@ -1,18 +1,18 @@
-package agent_test
+package loop_test
 
 import (
 	"context"
 	"testing"
 
-	agent "github.com/benaskins/axon-agent"
+	loop "github.com/benaskins/axon-loop"
 )
 
 func TestMessageFields(t *testing.T) {
-	msg := agent.Message{
+	msg := loop.Message{
 		Role:    "assistant",
 		Content: "Hello!",
 		Thinking: "Let me think...",
-		ToolCalls: []agent.ToolCall{
+		ToolCalls: []loop.ToolCall{
 			{Name: "web_search", Arguments: map[string]any{"query": "go"}},
 		},
 	}
@@ -32,9 +32,9 @@ func TestMessageFields(t *testing.T) {
 }
 
 func TestChatRequestFields(t *testing.T) {
-	req := agent.ChatRequest{
+	req := loop.ChatRequest{
 		Model: "llama3",
-		Messages: []agent.Message{
+		Messages: []loop.Message{
 			{Role: "user", Content: "Hi"},
 		},
 		Stream: true,
@@ -53,11 +53,11 @@ func TestChatRequestFields(t *testing.T) {
 }
 
 func TestChatResponseFields(t *testing.T) {
-	resp := agent.ChatResponse{
+	resp := loop.ChatResponse{
 		Content:  "Here you go",
 		Thinking: "Processing...",
 		Done:     true,
-		ToolCalls: []agent.ToolCall{
+		ToolCalls: []loop.ToolCall{
 			{Name: "current_time", Arguments: map[string]any{}},
 		},
 	}
@@ -72,10 +72,10 @@ func TestChatResponseFields(t *testing.T) {
 
 // stubClient implements ChatClient for testing.
 type stubClient struct {
-	responses []agent.ChatResponse
+	responses []loop.ChatResponse
 }
 
-func (s *stubClient) Chat(ctx context.Context, req *agent.ChatRequest, fn func(agent.ChatResponse) error) error {
+func (s *stubClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
 	for _, resp := range s.responses {
 		if err := fn(resp); err != nil {
 			return err
@@ -86,19 +86,19 @@ func (s *stubClient) Chat(ctx context.Context, req *agent.ChatRequest, fn func(a
 
 func TestChatClientInterface(t *testing.T) {
 	client := &stubClient{
-		responses: []agent.ChatResponse{
+		responses: []loop.ChatResponse{
 			{Content: "Hello ", Done: false},
 			{Content: "World!", Done: true},
 		},
 	}
 
-	var c agent.ChatClient = client
+	var c loop.ChatClient = client
 	var collected string
 
-	err := c.Chat(context.Background(), &agent.ChatRequest{
+	err := c.Chat(context.Background(), &loop.ChatRequest{
 		Model:    "test",
-		Messages: []agent.Message{{Role: "user", Content: "Hi"}},
-	}, func(resp agent.ChatResponse) error {
+		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+	}, func(resp loop.ChatResponse) error {
 		collected += resp.Content
 		return nil
 	})

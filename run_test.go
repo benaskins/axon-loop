@@ -1,4 +1,4 @@
-package agent_test
+package loop_test
 
 import (
 	"context"
@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/benaskins/axon-agent"
+	loop "github.com/benaskins/axon-loop"
 	tool "github.com/benaskins/axon-tool"
 )
 
 func TestRunSimpleChat(t *testing.T) {
 	client := &stubClient{
-		responses: []agent.ChatResponse{
+		responses: []loop.ChatResponse{
 			{Content: "Hello there!", Done: true},
 		},
 	}
@@ -20,10 +20,10 @@ func TestRunSimpleChat(t *testing.T) {
 	var tokens []string
 	var doneCalled bool
 
-	result, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test-model",
-		Messages: []agent.Message{{Role: "user", Content: "Hi"}},
-	}, nil, nil, agent.Callbacks{
+		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+	}, nil, nil, loop.Callbacks{
 		OnToken: func(token string) {
 			tokens = append(tokens, token)
 		},
@@ -49,12 +49,12 @@ func TestRunSimpleChat(t *testing.T) {
 func TestRunWithToolCall(t *testing.T) {
 	callCount := 0
 	client := &multiTurnClient{
-		turns: [][]agent.ChatResponse{
+		turns: [][]loop.ChatResponse{
 			// First turn: model calls a tool
 			{
 				{
 					Content: "",
-					ToolCalls: []agent.ToolCall{
+					ToolCalls: []loop.ToolCall{
 						{Name: "current_time", Arguments: map[string]any{}},
 					},
 					Done: true,
@@ -78,10 +78,10 @@ func TestRunWithToolCall(t *testing.T) {
 	}
 
 	var toolUses []string
-	result, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test-model",
-		Messages: []agent.Message{{Role: "user", Content: "What time is it?"}},
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, agent.Callbacks{
+		Messages: []loop.Message{{Role: "user", Content: "What time is it?"}},
+	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{
 		OnToolUse: func(name string, args map[string]any) {
 			toolUses = append(toolUses, name)
 		},
@@ -103,15 +103,15 @@ func TestRunWithToolCall(t *testing.T) {
 
 func TestRunNoTools(t *testing.T) {
 	client := &stubClient{
-		responses: []agent.ChatResponse{
+		responses: []loop.ChatResponse{
 			{Content: "Just chatting.", Done: true},
 		},
 	}
 
-	result, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test-model",
-		Messages: []agent.Message{{Role: "user", Content: "Hello"}},
-	}, nil, nil, agent.Callbacks{})
+		Messages: []loop.Message{{Role: "user", Content: "Hello"}},
+	}, nil, nil, loop.Callbacks{})
 
 	if err != nil {
 		t.Fatal(err)
@@ -123,17 +123,17 @@ func TestRunNoTools(t *testing.T) {
 
 func TestRunWithThinking(t *testing.T) {
 	client := &stubClient{
-		responses: []agent.ChatResponse{
+		responses: []loop.ChatResponse{
 			{Thinking: "Let me consider...", Done: false},
 			{Content: "Here's my answer.", Done: true},
 		},
 	}
 
 	var thinkingTokens []string
-	result, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test-model",
-		Messages: []agent.Message{{Role: "user", Content: "Think about this"}},
-	}, nil, nil, agent.Callbacks{
+		Messages: []loop.Message{{Role: "user", Content: "Think about this"}},
+	}, nil, nil, loop.Callbacks{
 		OnThinking: func(token string) {
 			thinkingTokens = append(thinkingTokens, token)
 		},
@@ -153,10 +153,10 @@ func TestRunWithThinking(t *testing.T) {
 func TestRunPassesToolsToClient(t *testing.T) {
 	var receivedTools []tool.ToolDef
 	client := &spyClient{
-		onChat: func(req *agent.ChatRequest) {
+		onChat: func(req *loop.ChatRequest) {
 			receivedTools = req.Tools
 		},
-		responses: []agent.ChatResponse{
+		responses: []loop.ChatResponse{
 			{Content: "ok", Done: true},
 		},
 	}
@@ -165,10 +165,10 @@ func TestRunPassesToolsToClient(t *testing.T) {
 		"current_time": tool.CurrentTimeTool(),
 	}
 
-	_, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	_, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test",
-		Messages: []agent.Message{{Role: "user", Content: "time?"}},
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, agent.Callbacks{})
+		Messages: []loop.Message{{Role: "user", Content: "time?"}},
+	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
 
 	if err != nil {
 		t.Fatal(err)
@@ -183,11 +183,11 @@ func TestRunPassesToolsToClient(t *testing.T) {
 
 // spyClient records the ChatRequest for inspection.
 type spyClient struct {
-	onChat    func(req *agent.ChatRequest)
-	responses []agent.ChatResponse
+	onChat    func(req *loop.ChatRequest)
+	responses []loop.ChatResponse
 }
 
-func (s *spyClient) Chat(ctx context.Context, req *agent.ChatRequest, fn func(agent.ChatResponse) error) error {
+func (s *spyClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
 	if s.onChat != nil {
 		s.onChat(req)
 	}
@@ -212,11 +212,11 @@ func TestRunMaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	_, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	_, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:         "test",
-		Messages:      []agent.Message{{Role: "user", Content: "loop"}},
+		Messages:      []loop.Message{{Role: "user", Content: "loop"}},
 		MaxIterations: 3,
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, agent.Callbacks{})
+	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
 
 	if err == nil {
 		t.Fatal("expected error for max iterations exceeded, got nil")
@@ -228,11 +228,11 @@ func TestRunMaxIterationsExceeded(t *testing.T) {
 
 func TestRunUnknownToolCall(t *testing.T) {
 	client := &multiTurnClient{
-		turns: [][]agent.ChatResponse{
+		turns: [][]loop.ChatResponse{
 			// First turn: model calls a tool that doesn't exist
 			{
 				{
-					ToolCalls: []agent.ToolCall{
+					ToolCalls: []loop.ToolCall{
 						{Name: "nonexistent_tool", Arguments: map[string]any{}},
 					},
 					Done: true,
@@ -254,10 +254,10 @@ func TestRunUnknownToolCall(t *testing.T) {
 		},
 	}
 
-	result, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test",
-		Messages: []agent.Message{{Role: "user", Content: "call something"}},
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, agent.Callbacks{})
+		Messages: []loop.Message{{Role: "user", Content: "call something"}},
+	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
 
 	if err != nil {
 		t.Fatal(err)
@@ -270,10 +270,10 @@ func TestRunUnknownToolCall(t *testing.T) {
 func TestRunChatClientError(t *testing.T) {
 	client := &errorClient{err: fmt.Errorf("connection refused")}
 
-	_, err := agent.Run(context.Background(), client, &agent.ChatRequest{
+	_, err := loop.Run(context.Background(), client, &loop.ChatRequest{
 		Model:    "test",
-		Messages: []agent.Message{{Role: "user", Content: "Hi"}},
-	}, nil, nil, agent.Callbacks{})
+		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+	}, nil, nil, loop.Callbacks{})
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -286,9 +286,9 @@ func TestRunChatClientError(t *testing.T) {
 // alwaysToolCallClient always returns a tool call on every Chat invocation.
 type alwaysToolCallClient struct{}
 
-func (a *alwaysToolCallClient) Chat(ctx context.Context, req *agent.ChatRequest, fn func(agent.ChatResponse) error) error {
-	return fn(agent.ChatResponse{
-		ToolCalls: []agent.ToolCall{
+func (a *alwaysToolCallClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
+	return fn(loop.ChatResponse{
+		ToolCalls: []loop.ToolCall{
 			{Name: "noop", Arguments: map[string]any{}},
 		},
 		Done: true,
@@ -300,17 +300,17 @@ type errorClient struct {
 	err error
 }
 
-func (e *errorClient) Chat(ctx context.Context, req *agent.ChatRequest, fn func(agent.ChatResponse) error) error {
+func (e *errorClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
 	return e.err
 }
 
 // multiTurnClient simulates a client that returns different responses on each call.
 type multiTurnClient struct {
-	turns [][]agent.ChatResponse
+	turns [][]loop.ChatResponse
 	call  int
 }
 
-func (m *multiTurnClient) Chat(ctx context.Context, req *agent.ChatRequest, fn func(agent.ChatResponse) error) error {
+func (m *multiTurnClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
 	if m.call >= len(m.turns) {
 		return nil
 	}

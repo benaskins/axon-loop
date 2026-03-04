@@ -1,4 +1,4 @@
-# axon-agent
+# axon-loop
 
 A provider-agnostic conversation loop for LLM-powered agents.
 
@@ -7,7 +7,7 @@ Handles message exchange, tool call dispatch, and streaming — with no HTTP, pe
 ## Install
 
 ```
-go get github.com/benaskins/axon-agent@latest
+go get github.com/benaskins/axon-loop@latest
 ```
 
 Requires Go 1.24+.
@@ -17,11 +17,11 @@ Requires Go 1.24+.
 Implement the `ChatClient` interface for your LLM backend, define tools, and run:
 
 ```go
-result, err := agent.Run(ctx, agent.RunConfig{
+result, err := loop.Run(ctx, loop.RunConfig{
     Client:   myLLMClient,
     Messages: messages,
     Tools:    toolDefs,
-    Callbacks: agent.Callbacks{
+    Callbacks: loop.Callbacks{
         OnToken: func(token string) { fmt.Print(token) },
     },
 })

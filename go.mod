@@ -1,4 +1,4 @@
-module github.com/benaskins/axon-agent
+module github.com/benaskins/axon-loop
 
 go 1.24.1
 
