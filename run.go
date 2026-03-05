@@ -31,7 +31,7 @@ type Result struct {
 // calls are made.
 //
 // tools and toolCtx may be nil for simple chat without tool support.
-func Run(ctx context.Context, client ChatClient, req *ChatRequest, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext, cb Callbacks) (*Result, error) {
+func Run(ctx context.Context, client LLMClient, req *ChatRequest, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext, cb Callbacks) (*Result, error) {
 	start := time.Now()
 	messages := make([]Message, len(req.Messages))
 	copy(messages, req.Messages)

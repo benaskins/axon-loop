@@ -70,7 +70,7 @@ func TestChatResponseFields(t *testing.T) {
 	}
 }
 
-// stubClient implements ChatClient for testing.
+// stubClient implements LLMClient for testing.
 type stubClient struct {
 	responses []loop.ChatResponse
 }
@@ -84,7 +84,7 @@ func (s *stubClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(lo
 	return nil
 }
 
-func TestChatClientInterface(t *testing.T) {
+func TestLLMClientInterface(t *testing.T) {
 	client := &stubClient{
 		responses: []loop.ChatResponse{
 			{Content: "Hello ", Done: false},
@@ -92,7 +92,7 @@ func TestChatClientInterface(t *testing.T) {
 		},
 	}
 
-	var c loop.ChatClient = client
+	var c loop.LLMClient = client
 	var collected string
 
 	err := c.Chat(context.Background(), &loop.ChatRequest{

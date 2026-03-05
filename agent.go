@@ -42,9 +42,9 @@ type ChatResponse struct {
 	ToolCalls []ToolCall
 }
 
-// ChatClient abstracts communication with an LLM backend.
+// LLMClient abstracts communication with an LLM backend.
 // Implementations translate to/from provider-specific APIs
 // (e.g. Ollama, OpenAI, Anthropic).
-type ChatClient interface {
+type LLMClient interface {
 	Chat(ctx context.Context, req *ChatRequest, fn func(ChatResponse) error) error
 }

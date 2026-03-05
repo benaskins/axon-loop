@@ -14,7 +14,7 @@ Requires Go 1.24+.
 
 ## Usage
 
-Implement the `ChatClient` interface for your LLM backend, define tools, and run:
+Implement the `LLMClient` interface for your LLM backend, define tools, and run:
 
 ```go
 result, err := loop.Run(ctx, loop.RunConfig{
@@ -29,7 +29,7 @@ result, err := loop.Run(ctx, loop.RunConfig{
 
 ### Key types
 
-- `ChatClient` — interface abstracting communication with any LLM backend
+- `LLMClient` — interface abstracting communication with any LLM backend
 - `ChatRequest` / `ChatResponse` — provider-agnostic request and streamed response
 - `Message` — a single message in a conversation
 - `ToolCall` — an LLM's decision to invoke a tool
