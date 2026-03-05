@@ -31,8 +31,8 @@ func TestMessageFields(t *testing.T) {
 	}
 }
 
-func TestChatRequestFields(t *testing.T) {
-	req := loop.ChatRequest{
+func TestRequestFields(t *testing.T) {
+	req := loop.Request{
 		Model: "llama3",
 		Messages: []loop.Message{
 			{Role: "user", Content: "Hi"},
@@ -52,8 +52,8 @@ func TestChatRequestFields(t *testing.T) {
 	}
 }
 
-func TestChatResponseFields(t *testing.T) {
-	resp := loop.ChatResponse{
+func TestResponseFields(t *testing.T) {
+	resp := loop.Response{
 		Content:  "Here you go",
 		Thinking: "Processing...",
 		Done:     true,
@@ -72,10 +72,10 @@ func TestChatResponseFields(t *testing.T) {
 
 // stubClient implements LLMClient for testing.
 type stubClient struct {
-	responses []loop.ChatResponse
+	responses []loop.Response
 }
 
-func (s *stubClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
+func (s *stubClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
 	for _, resp := range s.responses {
 		if err := fn(resp); err != nil {
 			return err
@@ -86,7 +86,7 @@ func (s *stubClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(lo
 
 func TestLLMClientInterface(t *testing.T) {
 	client := &stubClient{
-		responses: []loop.ChatResponse{
+		responses: []loop.Response{
 			{Content: "Hello ", Done: false},
 			{Content: "World!", Done: true},
 		},
@@ -95,10 +95,10 @@ func TestLLMClientInterface(t *testing.T) {
 	var c loop.LLMClient = client
 	var collected string
 
-	err := c.Chat(context.Background(), &loop.ChatRequest{
+	err := c.Chat(context.Background(), &loop.Request{
 		Model:    "test",
 		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
-	}, func(resp loop.ChatResponse) error {
+	}, func(resp loop.Response) error {
 		collected += resp.Content
 		return nil
 	})

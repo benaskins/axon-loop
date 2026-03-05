@@ -12,7 +12,7 @@ import (
 
 func TestRunSimpleChat(t *testing.T) {
 	client := &stubClient{
-		responses: []loop.ChatResponse{
+		responses: []loop.Response{
 			{Content: "Hello there!", Done: true},
 		},
 	}
@@ -20,7 +20,7 @@ func TestRunSimpleChat(t *testing.T) {
 	var tokens []string
 	var doneCalled bool
 
-	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test-model",
 		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
 	}, nil, nil, loop.Callbacks{
@@ -49,7 +49,7 @@ func TestRunSimpleChat(t *testing.T) {
 func TestRunWithToolCall(t *testing.T) {
 	callCount := 0
 	client := &multiTurnClient{
-		turns: [][]loop.ChatResponse{
+		turns: [][]loop.Response{
 			// First turn: model calls a tool
 			{
 				{
@@ -78,7 +78,7 @@ func TestRunWithToolCall(t *testing.T) {
 	}
 
 	var toolUses []string
-	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test-model",
 		Messages: []loop.Message{{Role: "user", Content: "What time is it?"}},
 	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{
@@ -103,12 +103,12 @@ func TestRunWithToolCall(t *testing.T) {
 
 func TestRunNoTools(t *testing.T) {
 	client := &stubClient{
-		responses: []loop.ChatResponse{
+		responses: []loop.Response{
 			{Content: "Just chatting.", Done: true},
 		},
 	}
 
-	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test-model",
 		Messages: []loop.Message{{Role: "user", Content: "Hello"}},
 	}, nil, nil, loop.Callbacks{})
@@ -123,14 +123,14 @@ func TestRunNoTools(t *testing.T) {
 
 func TestRunWithThinking(t *testing.T) {
 	client := &stubClient{
-		responses: []loop.ChatResponse{
+		responses: []loop.Response{
 			{Thinking: "Let me consider...", Done: false},
 			{Content: "Here's my answer.", Done: true},
 		},
 	}
 
 	var thinkingTokens []string
-	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test-model",
 		Messages: []loop.Message{{Role: "user", Content: "Think about this"}},
 	}, nil, nil, loop.Callbacks{
@@ -153,10 +153,10 @@ func TestRunWithThinking(t *testing.T) {
 func TestRunPassesToolsToClient(t *testing.T) {
 	var receivedTools []tool.ToolDef
 	client := &spyClient{
-		onChat: func(req *loop.ChatRequest) {
+		onChat: func(req *loop.Request) {
 			receivedTools = req.Tools
 		},
-		responses: []loop.ChatResponse{
+		responses: []loop.Response{
 			{Content: "ok", Done: true},
 		},
 	}
@@ -165,7 +165,7 @@ func TestRunPassesToolsToClient(t *testing.T) {
 		"current_time": tool.CurrentTimeTool(),
 	}
 
-	_, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	_, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test",
 		Messages: []loop.Message{{Role: "user", Content: "time?"}},
 	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
@@ -183,11 +183,11 @@ func TestRunPassesToolsToClient(t *testing.T) {
 
 // spyClient records the ChatRequest for inspection.
 type spyClient struct {
-	onChat    func(req *loop.ChatRequest)
-	responses []loop.ChatResponse
+	onChat    func(req *loop.Request)
+	responses []loop.Response
 }
 
-func (s *spyClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
+func (s *spyClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
 	if s.onChat != nil {
 		s.onChat(req)
 	}
@@ -212,7 +212,7 @@ func TestRunMaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	_, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	_, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:         "test",
 		Messages:      []loop.Message{{Role: "user", Content: "loop"}},
 		MaxIterations: 3,
@@ -228,7 +228,7 @@ func TestRunMaxIterationsExceeded(t *testing.T) {
 
 func TestRunUnknownToolCall(t *testing.T) {
 	client := &multiTurnClient{
-		turns: [][]loop.ChatResponse{
+		turns: [][]loop.Response{
 			// First turn: model calls a tool that doesn't exist
 			{
 				{
@@ -254,7 +254,7 @@ func TestRunUnknownToolCall(t *testing.T) {
 		},
 	}
 
-	result, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	result, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test",
 		Messages: []loop.Message{{Role: "user", Content: "call something"}},
 	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
@@ -270,7 +270,7 @@ func TestRunUnknownToolCall(t *testing.T) {
 func TestRunChatClientError(t *testing.T) {
 	client := &errorClient{err: fmt.Errorf("connection refused")}
 
-	_, err := loop.Run(context.Background(), client, &loop.ChatRequest{
+	_, err := loop.Run(context.Background(), client, &loop.Request{
 		Model:    "test",
 		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
 	}, nil, nil, loop.Callbacks{})
@@ -286,8 +286,8 @@ func TestRunChatClientError(t *testing.T) {
 // alwaysToolCallClient always returns a tool call on every Chat invocation.
 type alwaysToolCallClient struct{}
 
-func (a *alwaysToolCallClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
-	return fn(loop.ChatResponse{
+func (a *alwaysToolCallClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+	return fn(loop.Response{
 		ToolCalls: []loop.ToolCall{
 			{Name: "noop", Arguments: map[string]any{}},
 		},
@@ -300,17 +300,17 @@ type errorClient struct {
 	err error
 }
 
-func (e *errorClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
+func (e *errorClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
 	return e.err
 }
 
 // multiTurnClient simulates a client that returns different responses on each call.
 type multiTurnClient struct {
-	turns [][]loop.ChatResponse
+	turns [][]loop.Response
 	call  int
 }
 
-func (m *multiTurnClient) Chat(ctx context.Context, req *loop.ChatRequest, fn func(loop.ChatResponse) error) error {
+func (m *multiTurnClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
 	if m.call >= len(m.turns) {
 		return nil
 	}

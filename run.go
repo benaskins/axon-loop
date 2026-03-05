@@ -31,7 +31,7 @@ type Result struct {
 // calls are made.
 //
 // tools and toolCtx may be nil for simple chat without tool support.
-func Run(ctx context.Context, client LLMClient, req *ChatRequest, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext, cb Callbacks) (*Result, error) {
+func Run(ctx context.Context, client LLMClient, req *Request, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext, cb Callbacks) (*Result, error) {
 	start := time.Now()
 	messages := make([]Message, len(req.Messages))
 	copy(messages, req.Messages)
@@ -65,7 +65,7 @@ func Run(ctx context.Context, client LLMClient, req *ChatRequest, tools map[stri
 		if iterations > maxIter {
 			return nil, fmt.Errorf("max iterations (%d) exceeded", maxIter)
 		}
-		chatReq := &ChatRequest{
+		chatReq := &Request{
 			Model:    req.Model,
 			Messages: messages,
 			Tools:    toolDefs,
@@ -78,7 +78,7 @@ func Run(ctx context.Context, client LLMClient, req *ChatRequest, tools map[stri
 		var turnThinking strings.Builder
 		var toolCalls []ToolCall
 
-		err := client.Chat(ctx, chatReq, func(resp ChatResponse) error {
+		err := client.Chat(ctx, chatReq, func(resp Response) error {
 			if resp.Thinking != "" {
 				turnThinking.WriteString(resp.Thinking)
 				if cb.OnThinking != nil {

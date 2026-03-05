@@ -23,8 +23,8 @@ type ToolCall struct {
 	Arguments map[string]any
 }
 
-// ChatRequest is a provider-agnostic request to an LLM.
-type ChatRequest struct {
+// Request is a provider-agnostic request to an LLM.
+type Request struct {
 	Model         string
 	Messages      []Message
 	Tools         []tool.ToolDef
@@ -34,8 +34,8 @@ type ChatRequest struct {
 	MaxIterations int // Maximum tool-call loop iterations. Defaults to 20 if 0.
 }
 
-// ChatResponse is a provider-agnostic streamed response chunk from an LLM.
-type ChatResponse struct {
+// Response is a provider-agnostic streamed response chunk from an LLM.
+type Response struct {
 	Content   string
 	Thinking  string
 	Done      bool
@@ -46,5 +46,5 @@ type ChatResponse struct {
 // Implementations translate to/from provider-specific APIs
 // (e.g. Ollama, OpenAI, Anthropic).
 type LLMClient interface {
-	Chat(ctx context.Context, req *ChatRequest, fn func(ChatResponse) error) error
+	Chat(ctx context.Context, req *Request, fn func(Response) error) error
 }

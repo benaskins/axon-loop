@@ -30,7 +30,7 @@ result, err := loop.Run(ctx, loop.RunConfig{
 ### Key types
 
 - `LLMClient` — interface abstracting communication with any LLM backend
-- `ChatRequest` / `ChatResponse` — provider-agnostic request and streamed response
+- `Request` / `Response` — provider-agnostic request and streamed response
 - `Message` — a single message in a conversation
 - `ToolCall` — an LLM's decision to invoke a tool
 - `Run()` — executes the agent conversation loop with tool dispatch
