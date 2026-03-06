@@ -1,6 +1,6 @@
 # axon-loop
 
-A provider-agnostic conversation loop for LLM-powered agents.
+A provider-agnostic conversation loop for LLM-powered agents. Part of [lamina](https://github.com/benaskins/lamina) — each axon package can be used independently.
 
 Handles message exchange, tool call dispatch, and streaming — with no HTTP, persistence, or UI concerns.
 
