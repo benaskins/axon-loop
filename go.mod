@@ -1,6 +1,6 @@
 module github.com/benaskins/axon-loop
 
-go 1.24.1
+go 1.26.0
 
 require github.com/benaskins/axon-tool v0.1.0
 
