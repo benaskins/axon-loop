@@ -26,12 +26,27 @@ type Result struct {
 	Thinking string
 }
 
+// RunConfig bundles parameters for Run, keeping the function signature small.
+type RunConfig struct {
+	Client  LLMClient
+	Request *Request
+	Tools   map[string]tool.ToolDef
+	ToolCtx *tool.ToolContext
+	Callbacks
+}
+
 // Run executes a conversation loop: sends messages to the LLM, streams
 // the response, executes tool calls, and repeats until no more tool
 // calls are made.
 //
 // tools and toolCtx may be nil for simple chat without tool support.
-func Run(ctx context.Context, client LLMClient, req *Request, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext, cb Callbacks) (*Result, error) {
+func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
+	client := cfg.Client
+	req := cfg.Request
+	tools := cfg.Tools
+	toolCtx := cfg.ToolCtx
+	cb := cfg.Callbacks
+
 	start := time.Now()
 	messages := make([]Message, len(req.Messages))
 	copy(messages, req.Messages)
@@ -107,23 +122,21 @@ func Run(ctx context.Context, client LLMClient, req *Request, tools map[string]t
 		content := turnContent.String()
 		thinking := turnThinking.String()
 
-		// If tool calls, don't count tool-call content as final output
-		if len(toolCalls) > 0 {
-			content = ""
-		}
-
-		finalContent.WriteString(content)
 		finalThinking.WriteString(thinking)
 
 		// No tool calls — conversation turn is complete
 		if len(toolCalls) == 0 {
+			finalContent.WriteString(content)
 			break
 		}
 
+		// Preserve LLM explanations alongside tool calls
+		finalContent.WriteString(content)
+
 		// Append assistant message with tool calls to history
 		messages = append(messages, Message{
-			Role:      "assistant",
-			Content:   turnContent.String(),
+			Role:      RoleAssistant,
+			Content:   content,
 			Thinking:  thinking,
 			ToolCalls: toolCalls,
 		})
@@ -135,16 +148,18 @@ func Run(ctx context.Context, client LLMClient, req *Request, tools map[string]t
 			}
 
 			if def, ok := tools[tc.Name]; ok {
-				result := def.Execute(toolCtx, tc.Arguments)
+				result := executeTool(def, toolCtx, tc.Arguments)
 				messages = append(messages, Message{
-					Role:    "tool",
-					Content: result.Content,
+					Role:       RoleTool,
+					Content:    result,
+					ToolCallID: tc.ID,
 				})
 			} else {
 				slog.Warn("unknown tool called", "tool", tc.Name)
 				messages = append(messages, Message{
-					Role:    "tool",
-					Content: fmt.Sprintf("Error: unknown tool %q", tc.Name),
+					Role:       RoleTool,
+					Content:    fmt.Sprintf("Error: unknown tool %q", tc.Name),
+					ToolCallID: tc.ID,
 				})
 			}
 		}
@@ -159,4 +174,17 @@ func Run(ctx context.Context, client LLMClient, req *Request, tools map[string]t
 		Content:  finalContent.String(),
 		Thinking: finalThinking.String(),
 	}, nil
+}
+
+// executeTool runs a tool's Execute function with panic recovery so that a
+// misbehaving tool cannot crash the entire loop.
+func executeTool(def tool.ToolDef, toolCtx *tool.ToolContext, args map[string]any) (content string) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("tool panicked", "tool", def.Name, "panic", r)
+			content = fmt.Sprintf("Error: tool %q panicked: %v", def.Name, r)
+		}
+	}()
+	result := def.Execute(toolCtx, args)
+	return result.Content
 }

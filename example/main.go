@@ -44,17 +44,22 @@ func main() {
 	req := &loop.Request{
 		Model: "llama3",
 		Messages: []loop.Message{
-			{Role: "system", Content: "You are a helpful assistant. Use tools when appropriate."},
-			{Role: "user", Content: "Please greet Alice."},
+			{Role: loop.RoleSystem, Content: "You are a helpful assistant. Use tools when appropriate."},
+			{Role: loop.RoleUser, Content: "Please greet Alice."},
 		},
 		Stream: true,
 	}
 
 	// 4. Run the loop with streaming callbacks.
-	result, err := loop.Run(ctx, client, req, tools, nil, loop.Callbacks{
-		OnToken:   func(t string) { fmt.Print(t) },
-		OnToolUse: func(name string, args map[string]any) { fmt.Printf("\n[tool] %s %v\n", name, args) },
-		OnDone:    func(ms int64) { fmt.Printf("\n[done in %dms]\n", ms) },
+	result, err := loop.Run(ctx, loop.RunConfig{
+		Client:  client,
+		Request: req,
+		Tools:   tools,
+		Callbacks: loop.Callbacks{
+			OnToken:   func(t string) { fmt.Print(t) },
+			OnToolUse: func(name string, args map[string]any) { fmt.Printf("\n[tool] %s %v\n", name, args) },
+			OnDone:    func(ms int64) { fmt.Printf("\n[done in %dms]\n", ms) },
+		},
 	})
 	if err != nil {
 		log.Fatal(err)
