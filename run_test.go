@@ -20,15 +20,19 @@ func TestRunSimpleChat(t *testing.T) {
 	var tokens []string
 	var doneCalled bool
 
-	result, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test-model",
-		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
-	}, nil, nil, loop.Callbacks{
-		OnToken: func(token string) {
-			tokens = append(tokens, token)
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test-model",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "Hi"}},
 		},
-		OnDone: func(durationMs int64) {
-			doneCalled = true
+		Callbacks: loop.Callbacks{
+			OnToken: func(token string) {
+				tokens = append(tokens, token)
+			},
+			OnDone: func(durationMs int64) {
+				doneCalled = true
+			},
 		},
 	})
 
@@ -55,7 +59,7 @@ func TestRunWithToolCall(t *testing.T) {
 				{
 					Content: "",
 					ToolCalls: []loop.ToolCall{
-						{Name: "current_time", Arguments: map[string]any{}},
+						{ID: "call_1", Name: "current_time", Arguments: map[string]any{}},
 					},
 					Done: true,
 				},
@@ -78,12 +82,18 @@ func TestRunWithToolCall(t *testing.T) {
 	}
 
 	var toolUses []string
-	result, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test-model",
-		Messages: []loop.Message{{Role: "user", Content: "What time is it?"}},
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{
-		OnToolUse: func(name string, args map[string]any) {
-			toolUses = append(toolUses, name)
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test-model",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "What time is it?"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+		Callbacks: loop.Callbacks{
+			OnToolUse: func(name string, args map[string]any) {
+				toolUses = append(toolUses, name)
+			},
 		},
 	})
 
@@ -108,10 +118,13 @@ func TestRunNoTools(t *testing.T) {
 		},
 	}
 
-	result, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test-model",
-		Messages: []loop.Message{{Role: "user", Content: "Hello"}},
-	}, nil, nil, loop.Callbacks{})
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test-model",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "Hello"}},
+		},
+	})
 
 	if err != nil {
 		t.Fatal(err)
@@ -130,12 +143,16 @@ func TestRunWithThinking(t *testing.T) {
 	}
 
 	var thinkingTokens []string
-	result, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test-model",
-		Messages: []loop.Message{{Role: "user", Content: "Think about this"}},
-	}, nil, nil, loop.Callbacks{
-		OnThinking: func(token string) {
-			thinkingTokens = append(thinkingTokens, token)
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test-model",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "Think about this"}},
+		},
+		Callbacks: loop.Callbacks{
+			OnThinking: func(token string) {
+				thinkingTokens = append(thinkingTokens, token)
+			},
 		},
 	})
 
@@ -165,10 +182,15 @@ func TestRunPassesToolsToClient(t *testing.T) {
 		"current_time": tool.CurrentTimeTool(),
 	}
 
-	_, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test",
-		Messages: []loop.Message{{Role: "user", Content: "time?"}},
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
+	_, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "time?"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
 
 	if err != nil {
 		t.Fatal(err)
@@ -212,11 +234,16 @@ func TestRunMaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	_, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:         "test",
-		Messages:      []loop.Message{{Role: "user", Content: "loop"}},
-		MaxIterations: 3,
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
+	_, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:         "test",
+			Messages:      []loop.Message{{Role: loop.RoleUser, Content: "loop"}},
+			MaxIterations: 3,
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
 
 	if err == nil {
 		t.Fatal("expected error for max iterations exceeded, got nil")
@@ -233,7 +260,7 @@ func TestRunUnknownToolCall(t *testing.T) {
 			{
 				{
 					ToolCalls: []loop.ToolCall{
-						{Name: "nonexistent_tool", Arguments: map[string]any{}},
+						{ID: "call_1", Name: "nonexistent_tool", Arguments: map[string]any{}},
 					},
 					Done: true,
 				},
@@ -254,10 +281,15 @@ func TestRunUnknownToolCall(t *testing.T) {
 		},
 	}
 
-	result, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test",
-		Messages: []loop.Message{{Role: "user", Content: "call something"}},
-	}, tools, &tool.ToolContext{Ctx: context.Background()}, loop.Callbacks{})
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "call something"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
 
 	if err != nil {
 		t.Fatal(err)
@@ -270,16 +302,215 @@ func TestRunUnknownToolCall(t *testing.T) {
 func TestRunChatClientError(t *testing.T) {
 	client := &errorClient{err: fmt.Errorf("connection refused")}
 
-	_, err := loop.Run(context.Background(), client, &loop.Request{
-		Model:    "test",
-		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
-	}, nil, nil, loop.Callbacks{})
+	_, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "Hi"}},
+		},
+	})
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "connection refused") {
 		t.Errorf("error = %q, want it to contain 'connection refused'", err.Error())
+	}
+}
+
+func TestRunPanickingToolRecovery(t *testing.T) {
+	client := &multiTurnClient{
+		turns: [][]loop.Response{
+			// First turn: model calls a tool that panics
+			{
+				{
+					ToolCalls: []loop.ToolCall{
+						{ID: "call_1", Name: "bad_tool", Arguments: map[string]any{}},
+					},
+					Done: true,
+				},
+			},
+			// Second turn: model responds after seeing panic error
+			{
+				{Content: "The tool failed.", Done: true},
+			},
+		},
+	}
+
+	tools := map[string]tool.ToolDef{
+		"bad_tool": {
+			Name: "bad_tool",
+			Execute: func(ctx *tool.ToolContext, args map[string]any) tool.ToolResult {
+				panic("segfault simulation")
+			},
+		},
+	}
+
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "use the bad tool"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
+
+	if err != nil {
+		t.Fatalf("Run should not fail when a tool panics, got: %v", err)
+	}
+	if result.Content != "The tool failed." {
+		t.Errorf("Content = %q, want %q", result.Content, "The tool failed.")
+	}
+}
+
+func TestRunToolCallIDPropagation(t *testing.T) {
+	var capturedMessages []loop.Message
+	client := &multiTurnClient{
+		turns: [][]loop.Response{
+			{
+				{
+					ToolCalls: []loop.ToolCall{
+						{ID: "call_abc123", Name: "echo", Arguments: map[string]any{"text": "hi"}},
+					},
+					Done: true,
+				},
+			},
+			{
+				{Content: "Done.", Done: true},
+			},
+		},
+	}
+
+	// Use a spy to capture the messages sent on the second turn
+	origChat := client.Chat
+	client2 := &spyClient{
+		onChat: func(req *loop.Request) {
+			capturedMessages = req.Messages
+		},
+	}
+	// Wrap: first turn from multiTurnClient, spy captures second turn
+	wrapper := &delegatingClient{
+		clients: []loop.LLMClient{client, client2},
+	}
+	_ = origChat // suppress unused
+
+	tools := map[string]tool.ToolDef{
+		"echo": {
+			Name: "echo",
+			Execute: func(ctx *tool.ToolContext, args map[string]any) tool.ToolResult {
+				return tool.ToolResult{Content: "echoed"}
+			},
+		},
+	}
+
+	_, _ = loop.Run(context.Background(), loop.RunConfig{
+		Client: wrapper,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "echo something"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
+
+	// Find the tool result message in captured messages
+	var found bool
+	for _, msg := range capturedMessages {
+		if msg.Role == loop.RoleTool {
+			found = true
+			if msg.ToolCallID != "call_abc123" {
+				t.Errorf("ToolCallID = %q, want %q", msg.ToolCallID, "call_abc123")
+			}
+		}
+	}
+	if !found {
+		t.Error("no tool result message found in captured messages")
+	}
+}
+
+func TestRunContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	client := &cancellingClient{
+		cancel: cancel,
+	}
+
+	_, err := loop.Run(ctx, loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "Hi"}},
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+	if !strings.Contains(err.Error(), "context canceled") {
+		t.Errorf("error = %q, want it to contain 'context canceled'", err.Error())
+	}
+}
+
+func TestRunMultiToolCallsInSingleTurn(t *testing.T) {
+	var toolOrder []string
+	client := &multiTurnClient{
+		turns: [][]loop.Response{
+			// Model calls two tools in one turn
+			{
+				{
+					ToolCalls: []loop.ToolCall{
+						{ID: "call_1", Name: "tool_a", Arguments: map[string]any{}},
+						{ID: "call_2", Name: "tool_b", Arguments: map[string]any{}},
+					},
+					Done: true,
+				},
+			},
+			// Final answer
+			{
+				{Content: "Both done.", Done: true},
+			},
+		},
+	}
+
+	tools := map[string]tool.ToolDef{
+		"tool_a": {
+			Name: "tool_a",
+			Execute: func(ctx *tool.ToolContext, args map[string]any) tool.ToolResult {
+				toolOrder = append(toolOrder, "a")
+				return tool.ToolResult{Content: "result_a"}
+			},
+		},
+		"tool_b": {
+			Name: "tool_b",
+			Execute: func(ctx *tool.ToolContext, args map[string]any) tool.ToolResult {
+				toolOrder = append(toolOrder, "b")
+				return tool.ToolResult{Content: "result_b"}
+			},
+		},
+	}
+
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "use both tools"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "Both done." {
+		t.Errorf("Content = %q, want %q", result.Content, "Both done.")
+	}
+	if len(toolOrder) != 2 {
+		t.Fatalf("expected 2 tool calls, got %d", len(toolOrder))
+	}
+	if toolOrder[0] != "a" || toolOrder[1] != "b" {
+		t.Errorf("tool execution order = %v, want [a b]", toolOrder)
 	}
 }
 
@@ -322,4 +553,29 @@ func (m *multiTurnClient) Chat(ctx context.Context, req *loop.Request, fn func(l
 		}
 	}
 	return nil
+}
+
+// cancellingClient cancels the context during Chat, simulating mid-loop cancellation.
+type cancellingClient struct {
+	cancel context.CancelFunc
+}
+
+func (c *cancellingClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+	c.cancel()
+	return ctx.Err()
+}
+
+// delegatingClient delegates to a sequence of clients, one per call.
+type delegatingClient struct {
+	clients []loop.LLMClient
+	call    int
+}
+
+func (d *delegatingClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.Response) error) error {
+	if d.call >= len(d.clients) {
+		return nil
+	}
+	c := d.clients[d.call]
+	d.call++
+	return c.Chat(ctx, req, fn)
 }

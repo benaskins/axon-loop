@@ -9,22 +9,25 @@ import (
 
 func TestMessageFields(t *testing.T) {
 	msg := loop.Message{
-		Role:    "assistant",
+		Role:    loop.RoleAssistant,
 		Content: "Hello!",
 		Thinking: "Let me think...",
 		ToolCalls: []loop.ToolCall{
-			{Name: "web_search", Arguments: map[string]any{"query": "go"}},
+			{ID: "call_1", Name: "web_search", Arguments: map[string]any{"query": "go"}},
 		},
 	}
 
-	if msg.Role != "assistant" {
-		t.Errorf("Role = %q, want %q", msg.Role, "assistant")
+	if msg.Role != loop.RoleAssistant {
+		t.Errorf("Role = %q, want %q", msg.Role, loop.RoleAssistant)
 	}
 	if len(msg.ToolCalls) != 1 {
 		t.Fatalf("got %d tool calls, want 1", len(msg.ToolCalls))
 	}
 	if msg.ToolCalls[0].Name != "web_search" {
 		t.Errorf("ToolCall name = %q, want %q", msg.ToolCalls[0].Name, "web_search")
+	}
+	if msg.ToolCalls[0].ID != "call_1" {
+		t.Errorf("ToolCall ID = %q, want %q", msg.ToolCalls[0].ID, "call_1")
 	}
 	if msg.ToolCalls[0].Arguments["query"] != "go" {
 		t.Errorf("ToolCall query = %v, want %q", msg.ToolCalls[0].Arguments["query"], "go")
@@ -35,7 +38,7 @@ func TestRequestFields(t *testing.T) {
 	req := loop.Request{
 		Model: "llama3",
 		Messages: []loop.Message{
-			{Role: "user", Content: "Hi"},
+			{Role: loop.RoleUser, Content: "Hi"},
 		},
 		Stream: true,
 		Options: map[string]any{"temperature": 0.7},
@@ -58,7 +61,7 @@ func TestResponseFields(t *testing.T) {
 		Thinking: "Processing...",
 		Done:     true,
 		ToolCalls: []loop.ToolCall{
-			{Name: "current_time", Arguments: map[string]any{}},
+			{ID: "call_42", Name: "current_time", Arguments: map[string]any{}},
 		},
 	}
 
@@ -67,6 +70,26 @@ func TestResponseFields(t *testing.T) {
 	}
 	if resp.Content != "Here you go" {
 		t.Errorf("Content = %q, want %q", resp.Content, "Here you go")
+	}
+	if resp.ToolCalls[0].ID != "call_42" {
+		t.Errorf("ToolCall ID = %q, want %q", resp.ToolCalls[0].ID, "call_42")
+	}
+}
+
+func TestRoleConstants(t *testing.T) {
+	tests := []struct {
+		role loop.Role
+		want string
+	}{
+		{loop.RoleSystem, "system"},
+		{loop.RoleUser, "user"},
+		{loop.RoleAssistant, "assistant"},
+		{loop.RoleTool, "tool"},
+	}
+	for _, tt := range tests {
+		if string(tt.role) != tt.want {
+			t.Errorf("Role = %q, want %q", tt.role, tt.want)
+		}
 	}
 }
 
@@ -97,7 +120,7 @@ func TestLLMClientInterface(t *testing.T) {
 
 	err := c.Chat(context.Background(), &loop.Request{
 		Model:    "test",
-		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+		Messages: []loop.Message{{Role: loop.RoleUser, Content: "Hi"}},
 	}, func(resp loop.Response) error {
 		collected += resp.Content
 		return nil
