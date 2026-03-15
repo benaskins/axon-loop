@@ -48,3 +48,27 @@ type Response struct {
 type LLMClient interface {
 	Chat(ctx context.Context, req *Request, fn func(Response) error) error
 }
+
+// Event is a streaming event emitted by Stream. Consumers receive these
+// on a channel instead of registering callbacks.
+type Event struct {
+	// Exactly one of these is set per event.
+	Token    string            // incremental content token
+	Thinking string            // incremental thinking token
+	ToolUse  *ToolUseEvent     // a tool was invoked
+	Done     *DoneEvent        // the loop completed
+	Err      error             // the loop failed
+}
+
+// ToolUseEvent is emitted when the LLM invokes a tool.
+type ToolUseEvent struct {
+	Name string
+	Args map[string]any
+}
+
+// DoneEvent is emitted when the loop completes successfully.
+type DoneEvent struct {
+	Content    string
+	Thinking   string
+	DurationMs int64
+}

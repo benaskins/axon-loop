@@ -304,6 +304,120 @@ func (e *errorClient) Chat(ctx context.Context, req *loop.Request, fn func(loop.
 	return e.err
 }
 
+func TestStreamSimpleChat(t *testing.T) {
+	client := &stubClient{
+		responses: []loop.Response{
+			{Content: "Hello ", Done: false},
+			{Content: "world!", Done: true},
+		},
+	}
+
+	ch := loop.Stream(context.Background(), client, &loop.Request{
+		Model:    "test-model",
+		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+	}, nil, nil)
+
+	var tokens []string
+	var done *loop.DoneEvent
+	for ev := range ch {
+		if ev.Token != "" {
+			tokens = append(tokens, ev.Token)
+		}
+		if ev.Done != nil {
+			done = ev.Done
+		}
+		if ev.Err != nil {
+			t.Fatalf("unexpected error: %v", ev.Err)
+		}
+	}
+
+	if len(tokens) != 2 {
+		t.Errorf("got %d tokens, want 2", len(tokens))
+	}
+	if done == nil {
+		t.Fatal("expected Done event")
+	}
+	if done.Content != "Hello world!" {
+		t.Errorf("Content = %q, want %q", done.Content, "Hello world!")
+	}
+}
+
+func TestStreamWithToolCall(t *testing.T) {
+	client := &multiTurnClient{
+		turns: [][]loop.Response{
+			{
+				{
+					ToolCalls: []loop.ToolCall{
+						{Name: "greet", Arguments: map[string]any{"name": "Ben"}},
+					},
+					Done: true,
+				},
+			},
+			{
+				{Content: "Hi Ben!", Done: true},
+			},
+		},
+	}
+
+	tools := map[string]tool.ToolDef{
+		"greet": {
+			Name: "greet",
+			Execute: func(ctx *tool.ToolContext, args map[string]any) tool.ToolResult {
+				return tool.ToolResult{Content: "Greeted " + args["name"].(string)}
+			},
+		},
+	}
+
+	ch := loop.Stream(context.Background(), client, &loop.Request{
+		Model:    "test",
+		Messages: []loop.Message{{Role: "user", Content: "Say hi"}},
+	}, tools, nil)
+
+	var toolUses []string
+	var done *loop.DoneEvent
+	for ev := range ch {
+		if ev.ToolUse != nil {
+			toolUses = append(toolUses, ev.ToolUse.Name)
+		}
+		if ev.Done != nil {
+			done = ev.Done
+		}
+		if ev.Err != nil {
+			t.Fatalf("unexpected error: %v", ev.Err)
+		}
+	}
+
+	if len(toolUses) != 1 || toolUses[0] != "greet" {
+		t.Errorf("ToolUse events = %v, want [greet]", toolUses)
+	}
+	if done == nil || done.Content != "Hi Ben!" {
+		t.Errorf("Done.Content = %q, want %q", done.Content, "Hi Ben!")
+	}
+}
+
+func TestStreamError(t *testing.T) {
+	client := &errorClient{err: fmt.Errorf("network down")}
+
+	ch := loop.Stream(context.Background(), client, &loop.Request{
+		Model:    "test",
+		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+	}, nil, nil)
+
+	var gotErr error
+	for ev := range ch {
+		if ev.Err != nil {
+			gotErr = ev.Err
+		}
+	}
+
+	if gotErr == nil {
+		t.Fatal("expected error event")
+	}
+	if !strings.Contains(gotErr.Error(), "network down") {
+		t.Errorf("error = %q, want it to contain 'network down'", gotErr.Error())
+	}
+}
+
 // multiTurnClient simulates a client that returns different responses on each call.
 type multiTurnClient struct {
 	turns [][]loop.Response
