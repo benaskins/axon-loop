@@ -32,6 +32,7 @@ type Request struct {
 	Think         *bool
 	Options       map[string]any
 	MaxIterations int // Maximum tool-call loop iterations. Defaults to 20 if 0.
+	MaxTokens     int // Maximum estimated token budget for messages. 0 means no limit.
 }
 
 // Response is a provider-agnostic streamed response chunk from an LLM.
