@@ -26,6 +26,49 @@ type Result struct {
 	Thinking string
 }
 
+// Stream executes a conversation loop and returns a channel of Events.
+// The channel is closed when the loop completes or fails. The caller
+// reads events without building a callback-to-channel bridge.
+//
+// tools and toolCtx may be nil for simple chat without tool support.
+func Stream(ctx context.Context, client LLMClient, req *Request, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext) <-chan Event {
+	ch := make(chan Event, 64)
+
+	go func() {
+		defer close(ch)
+
+		var durationMs int64
+
+		result, err := Run(ctx, client, req, tools, toolCtx, Callbacks{
+			OnToken: func(token string) {
+				ch <- Event{Token: token}
+			},
+			OnThinking: func(token string) {
+				ch <- Event{Thinking: token}
+			},
+			OnToolUse: func(name string, args map[string]any) {
+				ch <- Event{ToolUse: &ToolUseEvent{Name: name, Args: args}}
+			},
+			OnDone: func(ms int64) {
+				durationMs = ms
+			},
+		})
+
+		if err != nil {
+			ch <- Event{Err: err}
+			return
+		}
+
+		ch <- Event{Done: &DoneEvent{
+			Content:    result.Content,
+			Thinking:   result.Thinking,
+			DurationMs: durationMs,
+		}}
+	}()
+
+	return ch
+}
+
 // Run executes a conversation loop: sends messages to the LLM, streams
 // the response, executes tool calls, and repeats until no more tool
 // calls are made.
