@@ -108,9 +108,15 @@ func Run(ctx context.Context, client LLMClient, req *Request, tools map[string]t
 		if iterations > maxIter {
 			return nil, fmt.Errorf("max iterations (%d) exceeded", maxIter)
 		}
+		// Apply token budget if set
+		sendMessages := messages
+		if req.MaxTokens > 0 {
+			sendMessages = trimToTokenBudget(messages, req.MaxTokens)
+		}
+
 		chatReq := &Request{
 			Model:    req.Model,
-			Messages: messages,
+			Messages: sendMessages,
 			Tools:    toolDefs,
 			Stream:   req.Stream,
 			Think:    req.Think,
