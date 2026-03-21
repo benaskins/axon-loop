@@ -6,16 +6,28 @@ import (
 	tool "github.com/benaskins/axon-tool"
 )
 
+// Role represents the sender of a message.
+type Role string
+
+const (
+	RoleSystem    Role = "system"
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
+)
+
 // Message represents a single message in a conversation.
 type Message struct {
-	Role      string
-	Content   string
-	Thinking  string
-	ToolCalls []ToolCall
+	Role       Role
+	Content    string
+	Thinking   string
+	ToolCalls  []ToolCall
+	ToolCallID string // Correlates a tool result with its originating ToolCall.
 }
 
 // ToolCall represents an LLM's decision to invoke a tool.
 type ToolCall struct {
+	ID        string // Provider-assigned correlation ID (e.g. OpenAI tool_call_id).
 	Name      string
 	Arguments map[string]any
 }
