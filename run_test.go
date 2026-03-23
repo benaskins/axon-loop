@@ -639,7 +639,7 @@ func TestStreamTrimEvent(t *testing.T) {
 			{Role: loop.RoleAssistant, Content: "old-resp"},
 			{Role: loop.RoleUser, Content: "recent"},
 		},
-		MaxTokens: 25, // tight budget triggers trimming via fallback TokenBudget strategy
+		MaxTokens: 5, // tight budget triggers trimming via fallback TokenBudget strategy
 	}
 
 	ch := loop.Stream(context.Background(), client, req, nil, nil)

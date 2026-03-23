@@ -32,7 +32,7 @@ func TokenBudget(budget int) ContextStrategy {
 // token count.
 func SlidingWindow(n int) ContextStrategy {
 	return ContextStrategyFunc(func(messages []Message) []Message {
-		if len(messages) == 0 || n <= 0 {
+		if len(messages) == 0 {
 			return messages
 		}
 
@@ -43,6 +43,14 @@ func SlidingWindow(n int) ContextStrategy {
 		}
 
 		conversation := messages[start:]
+		if n <= 0 {
+			// Keep only the system prompt (if any).
+			if start == 1 {
+				return []Message{messages[0]}
+			}
+			return nil
+		}
+
 		if len(conversation) <= n {
 			return messages
 		}

@@ -230,6 +230,36 @@ func TestSlidingWindow_NoSystemPrompt(t *testing.T) {
 	}
 }
 
+func TestSlidingWindow_ZeroKeepsOnlySystem(t *testing.T) {
+	msgs := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "resp1"},
+	}
+
+	result := SlidingWindow(0).Trim(msgs)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 message (system only), got %d", len(result))
+	}
+	if result[0].Role != "system" {
+		t.Errorf("expected system prompt, got %q", result[0].Role)
+	}
+}
+
+func TestSlidingWindow_ZeroNoSystem(t *testing.T) {
+	msgs := []Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "resp1"},
+	}
+
+	result := SlidingWindow(0).Trim(msgs)
+
+	if len(result) != 0 {
+		t.Fatalf("expected 0 messages, got %d", len(result))
+	}
+}
+
 func TestSlidingWindow_EmptyMessages(t *testing.T) {
 	result := SlidingWindow(5).Trim(nil)
 	if len(result) != 0 {
