@@ -72,27 +72,32 @@ func SlidingWindow(n int) ContextStrategy {
 	})
 }
 
-// droppedMessages computes which messages were removed by trimming.
-// Assumes strategies preserve the system prompt and trim a contiguous
-// prefix of the conversation (the pattern used by all built-in strategies).
+// droppedMessages computes which messages from original are absent in
+// trimmed. It walks both slices in order, treating trimmed as a
+// subsequence of original. Messages in original that don't appear in
+// trimmed are returned in their original order.
 func droppedMessages(original, trimmed []Message) []Message {
 	if len(trimmed) >= len(original) {
 		return nil
 	}
 
-	start := 0
-	if len(original) > 0 && original[0].Role == RoleSystem {
-		start = 1
+	var dropped []Message
+	j := 0
+	for i := range original {
+		if j < len(trimmed) && messageEqual(original[i], trimmed[j]) {
+			j++
+		} else {
+			dropped = append(dropped, original[i])
+		}
 	}
-
-	trimCount := len(original) - len(trimmed)
-	if trimCount <= 0 {
-		return nil
-	}
-
-	dropped := make([]Message, trimCount)
-	copy(dropped, original[start:start+trimCount])
 	return dropped
+}
+
+// messageEqual reports whether two messages have the same role, content,
+// and tool call ID. This is sufficient for identifying messages across
+// trim boundaries where slice identity is lost.
+func messageEqual(a, b Message) bool {
+	return a.Role == b.Role && a.Content == b.Content && a.ToolCallID == b.ToolCallID
 }
 
 // estimateTokens returns a rough token count for a string.

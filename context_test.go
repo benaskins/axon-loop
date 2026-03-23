@@ -318,3 +318,55 @@ func TestDroppedMessages_NoTrimming(t *testing.T) {
 		t.Errorf("expected 0 dropped when no trimming, got %d", len(dropped))
 	}
 }
+
+func TestDroppedMessages_MiddleDrop(t *testing.T) {
+	// A custom strategy that drops from the middle, not just a prefix.
+	original := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "keep1"},
+		{Role: "assistant", Content: "drop-me"},
+		{Role: "user", Content: "keep2"},
+		{Role: "assistant", Content: "keep3"},
+	}
+	trimmed := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "keep1"},
+		{Role: "user", Content: "keep2"},
+		{Role: "assistant", Content: "keep3"},
+	}
+
+	dropped := droppedMessages(original, trimmed)
+	if len(dropped) != 1 {
+		t.Fatalf("expected 1 dropped, got %d", len(dropped))
+	}
+	if dropped[0].Content != "drop-me" {
+		t.Errorf("dropped[0] = %q, want drop-me", dropped[0].Content)
+	}
+}
+
+func TestDroppedMessages_MultipleNonContiguous(t *testing.T) {
+	original := []Message{
+		{Role: "user", Content: "a"},
+		{Role: "assistant", Content: "b"},
+		{Role: "user", Content: "c"},
+		{Role: "assistant", Content: "d"},
+		{Role: "user", Content: "e"},
+	}
+	// Strategy keeps a, c, e — drops b and d.
+	trimmed := []Message{
+		{Role: "user", Content: "a"},
+		{Role: "user", Content: "c"},
+		{Role: "user", Content: "e"},
+	}
+
+	dropped := droppedMessages(original, trimmed)
+	if len(dropped) != 2 {
+		t.Fatalf("expected 2 dropped, got %d", len(dropped))
+	}
+	if dropped[0].Content != "b" {
+		t.Errorf("dropped[0] = %q, want b", dropped[0].Content)
+	}
+	if dropped[1].Content != "d" {
+		t.Errorf("dropped[1] = %q, want d", dropped[1].Content)
+	}
+}
