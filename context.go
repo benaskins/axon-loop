@@ -27,6 +27,23 @@ func TokenBudget(budget int) ContextStrategy {
 	})
 }
 
+// TokenBudgetWithMinWindow trims to a token budget but guarantees at
+// least minMessages conversation messages are kept (plus the system
+// prompt). Whichever approach retains more messages wins. This prevents
+// a large system prompt from starving the conversation history.
+func TokenBudgetWithMinWindow(budget, minMessages int) ContextStrategy {
+	tokenStrategy := TokenBudget(budget)
+	windowStrategy := SlidingWindow(minMessages)
+	return ContextStrategyFunc(func(messages []Message) []Message {
+		byBudget := tokenStrategy.Trim(messages)
+		byWindow := windowStrategy.Trim(messages)
+		if len(byBudget) >= len(byWindow) {
+			return byBudget
+		}
+		return byWindow
+	})
+}
+
 // SlidingWindow keeps the system prompt plus the last n conversation
 // messages. Useful when you want a fixed-size history regardless of
 // token count.

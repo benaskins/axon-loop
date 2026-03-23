@@ -171,6 +171,80 @@ func TestTokenBudget_MatchesTrimToTokenBudget(t *testing.T) {
 	}
 }
 
+func TestTokenBudgetWithMinWindow_RespectsMinimum(t *testing.T) {
+	// System prompt is large, eating most of the budget.
+	// TokenBudget alone would keep only 1 message, but minMessages=4
+	// guarantees the last 4 are kept.
+	msgs := []Message{
+		{Role: "system", Content: "you are a very helpful assistant with a long system prompt that uses many tokens"},
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "resp1"},
+		{Role: "user", Content: "msg2"},
+		{Role: "assistant", Content: "resp2"},
+		{Role: "user", Content: "msg3"},
+		{Role: "assistant", Content: "resp3"},
+	}
+
+	// Budget tight enough that TokenBudget alone would trim aggressively.
+	budget := messageTokens(msgs[0]) + messageTokens(msgs[5]) + messageTokens(msgs[6]) + 2
+	result := TokenBudgetWithMinWindow(budget, 4).Trim(msgs)
+
+	// Should have system + last 4 conversation messages (minimum window wins).
+	if len(result) != 5 {
+		t.Fatalf("expected 5 messages (system + 4 min window), got %d", len(result))
+	}
+	if result[0].Role != RoleSystem {
+		t.Error("first message should be system prompt")
+	}
+	if result[1].Content != "msg2" {
+		t.Errorf("result[1] = %q, want msg2", result[1].Content)
+	}
+	if result[4].Content != "resp3" {
+		t.Errorf("result[4] = %q, want resp3", result[4].Content)
+	}
+}
+
+func TestTokenBudgetWithMinWindow_BudgetWinsWhenGenerous(t *testing.T) {
+	msgs := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "old"},
+		{Role: "assistant", Content: "old-resp"},
+		{Role: "user", Content: "recent"},
+		{Role: "assistant", Content: "latest"},
+	}
+
+	// Generous budget keeps everything; minMessages=2 is irrelevant.
+	result := TokenBudgetWithMinWindow(10000, 2).Trim(msgs)
+
+	if len(result) != 5 {
+		t.Fatalf("expected all 5 messages with generous budget, got %d", len(result))
+	}
+}
+
+func TestTokenBudgetWithMinWindow_BudgetTrimsMoreThanMinWindow(t *testing.T) {
+	// When budget keeps more than the minimum window, budget wins.
+	msgs := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "a"},
+		{Role: "assistant", Content: "b"},
+		{Role: "user", Content: "c"},
+		{Role: "assistant", Content: "d"},
+		{Role: "user", Content: "e"},
+	}
+
+	// Budget can fit system + last 4, min window is 2. Budget keeps more, so budget wins.
+	budget := messageTokens(msgs[0]) + messageTokens(msgs[2]) + messageTokens(msgs[3]) + messageTokens(msgs[4]) + messageTokens(msgs[5])
+	result := TokenBudgetWithMinWindow(budget, 2).Trim(msgs)
+
+	if len(result) < 3 { // at least system + 2
+		t.Fatalf("expected at least 3 messages, got %d", len(result))
+	}
+	// Budget should keep more than the minimum 2
+	if len(result) <= 3 {
+		t.Errorf("expected budget to keep more than min window of 2, got %d messages", len(result))
+	}
+}
+
 func TestSlidingWindow_KeepsLastN(t *testing.T) {
 	msgs := []Message{
 		{Role: "system", Content: "sys"},
