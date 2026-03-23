@@ -41,8 +41,9 @@ type RunConfig struct {
 // The channel is closed when the loop completes or fails. The caller
 // reads events without building a callback-to-channel bridge.
 //
-// tools and toolCtx may be nil for simple chat without tool support.
-func Stream(ctx context.Context, client LLMClient, req *Request, tools map[string]tool.ToolDef, toolCtx *tool.ToolContext) <-chan Event {
+// Any Callbacks in cfg are ignored — Stream bridges all events to the
+// returned channel.
+func Stream(ctx context.Context, cfg RunConfig) <-chan Event {
 	ch := make(chan Event, 64)
 
 	go func() {
@@ -50,29 +51,26 @@ func Stream(ctx context.Context, client LLMClient, req *Request, tools map[strin
 
 		var durationMs int64
 
-		result, err := Run(ctx, RunConfig{
-			Client:  client,
-			Request: req,
-			Tools:   tools,
-			ToolCtx: toolCtx,
-			Callbacks: Callbacks{
-				OnToken: func(token string) {
-					ch <- Event{Token: token}
-				},
-				OnThinking: func(token string) {
-					ch <- Event{Thinking: token}
-				},
-				OnToolUse: func(name string, args map[string]any) {
-					ch <- Event{ToolUse: &ToolUseEvent{Name: name, Args: args}}
-				},
-				OnTrim: func(dropped []Message) {
-					ch <- Event{Trim: &TrimEvent{Dropped: dropped}}
-				},
-				OnDone: func(ms int64) {
-					durationMs = ms
-				},
+		// Override callbacks to bridge events to the channel.
+		cfg.Callbacks = Callbacks{
+			OnToken: func(token string) {
+				ch <- Event{Token: token}
 			},
-		})
+			OnThinking: func(token string) {
+				ch <- Event{Thinking: token}
+			},
+			OnToolUse: func(name string, args map[string]any) {
+				ch <- Event{ToolUse: &ToolUseEvent{Name: name, Args: args}}
+			},
+			OnTrim: func(dropped []Message) {
+				ch <- Event{Trim: &TrimEvent{Dropped: dropped}}
+			},
+			OnDone: func(ms int64) {
+				durationMs = ms
+			},
+		}
+
+		result, err := Run(ctx, cfg)
 
 		if err != nil {
 			ch <- Event{Err: err}

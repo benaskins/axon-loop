@@ -631,18 +631,19 @@ func TestStreamTrimEvent(t *testing.T) {
 		},
 	}
 
-	req := &loop.Request{
-		Model: "test",
-		Messages: []loop.Message{
-			{Role: loop.RoleSystem, Content: "system"},
-			{Role: loop.RoleUser, Content: "old"},
-			{Role: loop.RoleAssistant, Content: "old-resp"},
-			{Role: loop.RoleUser, Content: "recent"},
+	ch := loop.Stream(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model: "test",
+			Messages: []loop.Message{
+				{Role: loop.RoleSystem, Content: "system"},
+				{Role: loop.RoleUser, Content: "old"},
+				{Role: loop.RoleAssistant, Content: "old-resp"},
+				{Role: loop.RoleUser, Content: "recent"},
+			},
 		},
-		MaxTokens: 5, // tight budget triggers trimming via fallback TokenBudget strategy
-	}
-
-	ch := loop.Stream(context.Background(), client, req, nil, nil)
+		Context: loop.SlidingWindow(1),
+	})
 
 	var gotTrim *loop.TrimEvent
 	for ev := range ch {
@@ -657,8 +658,8 @@ func TestStreamTrimEvent(t *testing.T) {
 	if gotTrim == nil {
 		t.Fatal("expected TrimEvent from Stream, got none")
 	}
-	if len(gotTrim.Dropped) == 0 {
-		t.Error("expected dropped messages in TrimEvent")
+	if len(gotTrim.Dropped) != 2 {
+		t.Errorf("expected 2 dropped messages, got %d", len(gotTrim.Dropped))
 	}
 }
 
@@ -691,10 +692,13 @@ func TestStreamSimpleChat(t *testing.T) {
 		},
 	}
 
-	ch := loop.Stream(context.Background(), client, &loop.Request{
-		Model:    "test-model",
-		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
-	}, nil, nil)
+	ch := loop.Stream(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test-model",
+			Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+		},
+	})
 
 	var tokens []string
 	var done *loop.DoneEvent
@@ -747,10 +751,14 @@ func TestStreamWithToolCall(t *testing.T) {
 		},
 	}
 
-	ch := loop.Stream(context.Background(), client, &loop.Request{
-		Model:    "test",
-		Messages: []loop.Message{{Role: "user", Content: "Say hi"}},
-	}, tools, nil)
+	ch := loop.Stream(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: "user", Content: "Say hi"}},
+		},
+		Tools: tools,
+	})
 
 	var toolUses []string
 	var done *loop.DoneEvent
@@ -777,10 +785,13 @@ func TestStreamWithToolCall(t *testing.T) {
 func TestStreamError(t *testing.T) {
 	client := &errorClient{err: fmt.Errorf("network down")}
 
-	ch := loop.Stream(context.Background(), client, &loop.Request{
-		Model:    "test",
-		Messages: []loop.Message{{Role: "user", Content: "Hi"}},
-	}, nil, nil)
+	ch := loop.Stream(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: "user", Content: "Hi"}},
+		},
+	})
 
 	var gotErr error
 	for ev := range ch {
