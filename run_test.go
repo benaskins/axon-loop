@@ -514,6 +514,154 @@ func TestRunMultiToolCallsInSingleTurn(t *testing.T) {
 	}
 }
 
+func TestRunWithContextStrategy(t *testing.T) {
+	// Use a spy to verify trimmed messages reach the client.
+	var receivedMsgCount int
+	client := &spyClient{
+		onChat: func(req *loop.Request) {
+			receivedMsgCount = len(req.Messages)
+		},
+		responses: []loop.Response{
+			{Content: "ok", Done: true},
+		},
+	}
+
+	_, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model: "test",
+			Messages: []loop.Message{
+				{Role: loop.RoleSystem, Content: "system"},
+				{Role: loop.RoleUser, Content: "old1"},
+				{Role: loop.RoleAssistant, Content: "old2"},
+				{Role: loop.RoleUser, Content: "old3"},
+				{Role: loop.RoleAssistant, Content: "old4"},
+				{Role: loop.RoleUser, Content: "recent"},
+			},
+		},
+		Context: loop.SlidingWindow(2),
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	// system + last 2 conversation messages
+	if receivedMsgCount != 3 {
+		t.Errorf("client received %d messages, want 3 (system + 2 recent)", receivedMsgCount)
+	}
+}
+
+func TestRunOnTrimCallback(t *testing.T) {
+	client := &stubClient{
+		responses: []loop.Response{
+			{Content: "ok", Done: true},
+		},
+	}
+
+	var trimmedMsgs []loop.Message
+	_, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model: "test",
+			Messages: []loop.Message{
+				{Role: loop.RoleSystem, Content: "system"},
+				{Role: loop.RoleUser, Content: "drop-me-1"},
+				{Role: loop.RoleAssistant, Content: "drop-me-2"},
+				{Role: loop.RoleUser, Content: "keep"},
+			},
+		},
+		Context: loop.SlidingWindow(1),
+		Callbacks: loop.Callbacks{
+			OnTrim: func(dropped []loop.Message) {
+				trimmedMsgs = dropped
+			},
+		},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trimmedMsgs) != 2 {
+		t.Fatalf("OnTrim received %d messages, want 2", len(trimmedMsgs))
+	}
+	if trimmedMsgs[0].Content != "drop-me-1" {
+		t.Errorf("dropped[0] = %q, want drop-me-1", trimmedMsgs[0].Content)
+	}
+	if trimmedMsgs[1].Content != "drop-me-2" {
+		t.Errorf("dropped[1] = %q, want drop-me-2", trimmedMsgs[1].Content)
+	}
+}
+
+func TestRunOnTrimNotCalledWhenNoTrimming(t *testing.T) {
+	client := &stubClient{
+		responses: []loop.Response{
+			{Content: "ok", Done: true},
+		},
+	}
+
+	trimCalled := false
+	_, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model: "test",
+			Messages: []loop.Message{
+				{Role: loop.RoleUser, Content: "hello"},
+			},
+		},
+		Context: loop.SlidingWindow(10), // window bigger than history
+		Callbacks: loop.Callbacks{
+			OnTrim: func(dropped []loop.Message) {
+				trimCalled = true
+			},
+		},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if trimCalled {
+		t.Error("OnTrim should not be called when no messages are trimmed")
+	}
+}
+
+func TestStreamTrimEvent(t *testing.T) {
+	client := &stubClient{
+		responses: []loop.Response{
+			{Content: "ok", Done: true},
+		},
+	}
+
+	req := &loop.Request{
+		Model: "test",
+		Messages: []loop.Message{
+			{Role: loop.RoleSystem, Content: "system"},
+			{Role: loop.RoleUser, Content: "old"},
+			{Role: loop.RoleAssistant, Content: "old-resp"},
+			{Role: loop.RoleUser, Content: "recent"},
+		},
+		MaxTokens: 25, // tight budget triggers trimming via fallback TokenBudget strategy
+	}
+
+	ch := loop.Stream(context.Background(), client, req, nil, nil)
+
+	var gotTrim *loop.TrimEvent
+	for ev := range ch {
+		if ev.Trim != nil {
+			gotTrim = ev.Trim
+		}
+		if ev.Err != nil {
+			t.Fatalf("unexpected error: %v", ev.Err)
+		}
+	}
+
+	if gotTrim == nil {
+		t.Fatal("expected TrimEvent from Stream, got none")
+	}
+	if len(gotTrim.Dropped) == 0 {
+		t.Error("expected dropped messages in TrimEvent")
+	}
+}
+
 // alwaysToolCallClient always returns a tool call on every Chat invocation.
 type alwaysToolCallClient struct{}
 

@@ -2,6 +2,91 @@ package loop
 
 import "log/slog"
 
+// ContextStrategy controls how conversation history is trimmed before
+// each LLM request. Implementations receive the full message slice and
+// return the subset to send. The system prompt (if present as the first
+// message) should generally be preserved.
+type ContextStrategy interface {
+	// Trim returns the messages to send to the LLM.
+	// The input slice must not be modified.
+	Trim(messages []Message) []Message
+}
+
+// ContextStrategyFunc adapts a plain function into a ContextStrategy.
+type ContextStrategyFunc func(messages []Message) []Message
+
+func (f ContextStrategyFunc) Trim(messages []Message) []Message { return f(messages) }
+
+// TokenBudget trims conversation history to fit within an estimated token
+// budget. The system prompt is always preserved; older messages are dropped
+// first. This is the strategy used when Request.MaxTokens is set without
+// an explicit ContextStrategy.
+func TokenBudget(budget int) ContextStrategy {
+	return ContextStrategyFunc(func(messages []Message) []Message {
+		return trimToTokenBudget(messages, budget)
+	})
+}
+
+// SlidingWindow keeps the system prompt plus the last n conversation
+// messages. Useful when you want a fixed-size history regardless of
+// token count.
+func SlidingWindow(n int) ContextStrategy {
+	return ContextStrategyFunc(func(messages []Message) []Message {
+		if len(messages) == 0 || n <= 0 {
+			return messages
+		}
+
+		// Separate system prompt
+		start := 0
+		if messages[0].Role == RoleSystem {
+			start = 1
+		}
+
+		conversation := messages[start:]
+		if len(conversation) <= n {
+			return messages
+		}
+
+		trimmed := len(conversation) - n
+		kept := conversation[trimmed:]
+
+		slog.Info("context trimmed (sliding window)",
+			"original_messages", len(messages),
+			"kept_messages", len(kept)+start,
+			"trimmed_messages", trimmed,
+			"window_size", n,
+		)
+
+		if start == 1 {
+			return append([]Message{messages[0]}, kept...)
+		}
+		return kept
+	})
+}
+
+// droppedMessages computes which messages were removed by trimming.
+// Assumes strategies preserve the system prompt and trim a contiguous
+// prefix of the conversation (the pattern used by all built-in strategies).
+func droppedMessages(original, trimmed []Message) []Message {
+	if len(trimmed) >= len(original) {
+		return nil
+	}
+
+	start := 0
+	if len(original) > 0 && original[0].Role == RoleSystem {
+		start = 1
+	}
+
+	trimCount := len(original) - len(trimmed)
+	if trimCount <= 0 {
+		return nil
+	}
+
+	dropped := make([]Message, trimCount)
+	copy(dropped, original[start:start+trimCount])
+	return dropped
+}
+
 // estimateTokens returns a rough token count for a string.
 // Uses the ~4 characters per token heuristic common across
 // LLM tokenizers. Not precise, but good enough for budgeting.

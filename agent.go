@@ -66,8 +66,14 @@ type Event struct {
 	Token    string            // incremental content token
 	Thinking string            // incremental thinking token
 	ToolUse  *ToolUseEvent     // a tool was invoked
+	Trim     *TrimEvent        // context was trimmed
 	Done     *DoneEvent        // the loop completed
 	Err      error             // the loop failed
+}
+
+// TrimEvent is emitted when the context strategy drops messages.
+type TrimEvent struct {
+	Dropped []Message
 }
 
 // ToolUseEvent is emitted when the LLM invokes a tool.

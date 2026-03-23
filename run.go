@@ -17,6 +17,7 @@ type Callbacks struct {
 	OnToken    func(token string)
 	OnThinking func(token string)
 	OnToolUse  func(name string, args map[string]any)
+	OnTrim     func(dropped []Message) // Called when context trimming drops messages.
 	OnDone     func(durationMs int64)
 }
 
@@ -32,6 +33,7 @@ type RunConfig struct {
 	Request *Request
 	Tools   map[string]tool.ToolDef
 	ToolCtx *tool.ToolContext
+	Context ContextStrategy // Optional; trims messages before each LLM call.
 	Callbacks
 }
 
@@ -62,6 +64,9 @@ func Stream(ctx context.Context, client LLMClient, req *Request, tools map[strin
 				},
 				OnToolUse: func(name string, args map[string]any) {
 					ch <- Event{ToolUse: &ToolUseEvent{Name: name, Args: args}}
+				},
+				OnTrim: func(dropped []Message) {
+					ch <- Event{Trim: &TrimEvent{Dropped: dropped}}
 				},
 				OnDone: func(ms int64) {
 					durationMs = ms
@@ -94,7 +99,13 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 	req := cfg.Request
 	tools := cfg.Tools
 	toolCtx := cfg.ToolCtx
+	ctxStrategy := cfg.Context
 	cb := cfg.Callbacks
+
+	// Fall back to token budget trimming when no explicit strategy is set.
+	if ctxStrategy == nil && req.MaxTokens > 0 {
+		ctxStrategy = TokenBudget(req.MaxTokens)
+	}
 
 	start := time.Now()
 	messages := make([]Message, len(req.Messages))
@@ -129,10 +140,13 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 		if iterations > maxIter {
 			return nil, fmt.Errorf("max iterations (%d) exceeded", maxIter)
 		}
-		// Apply token budget if set
+		// Apply context strategy if set
 		sendMessages := messages
-		if req.MaxTokens > 0 {
-			sendMessages = trimToTokenBudget(messages, req.MaxTokens)
+		if ctxStrategy != nil {
+			sendMessages = ctxStrategy.Trim(messages)
+			if cb.OnTrim != nil && len(sendMessages) < len(messages) {
+				cb.OnTrim(droppedMessages(messages, sendMessages))
+			}
 		}
 
 		chatReq := &Request{

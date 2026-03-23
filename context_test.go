@@ -145,3 +145,146 @@ func TestMessageTokens_IncludesToolCalls(t *testing.T) {
 		t.Errorf("expected tool call message to have >10 tokens, got %d", tokens)
 	}
 }
+
+// --- ContextStrategy tests ---
+
+func TestTokenBudget_MatchesTrimToTokenBudget(t *testing.T) {
+	msgs := []Message{
+		{Role: "system", Content: "you are helpful"},
+		{Role: "user", Content: "old message"},
+		{Role: "assistant", Content: "old response"},
+		{Role: "user", Content: "recent"},
+		{Role: "assistant", Content: "latest"},
+	}
+
+	budget := 30
+	direct := trimToTokenBudget(msgs, budget)
+	strategy := TokenBudget(budget).Trim(msgs)
+
+	if len(direct) != len(strategy) {
+		t.Fatalf("TokenBudget strategy returned %d messages, trimToTokenBudget returned %d", len(strategy), len(direct))
+	}
+	for i := range direct {
+		if direct[i].Content != strategy[i].Content {
+			t.Errorf("message %d: direct=%q, strategy=%q", i, direct[i].Content, strategy[i].Content)
+		}
+	}
+}
+
+func TestSlidingWindow_KeepsLastN(t *testing.T) {
+	msgs := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "resp1"},
+		{Role: "user", Content: "msg2"},
+		{Role: "assistant", Content: "resp2"},
+		{Role: "user", Content: "msg3"},
+	}
+
+	result := SlidingWindow(2).Trim(msgs)
+
+	if len(result) != 3 { // system + last 2
+		t.Fatalf("expected 3 messages, got %d", len(result))
+	}
+	if result[0].Role != "system" {
+		t.Error("first message should be system prompt")
+	}
+	if result[1].Content != "resp2" {
+		t.Errorf("expected resp2, got %q", result[1].Content)
+	}
+	if result[2].Content != "msg3" {
+		t.Errorf("expected msg3, got %q", result[2].Content)
+	}
+}
+
+func TestSlidingWindow_KeepsAllWhenUnderWindow(t *testing.T) {
+	msgs := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "hello"},
+	}
+
+	result := SlidingWindow(10).Trim(msgs)
+	if len(result) != 2 {
+		t.Errorf("expected all 2 messages, got %d", len(result))
+	}
+}
+
+func TestSlidingWindow_NoSystemPrompt(t *testing.T) {
+	msgs := []Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "assistant", Content: "resp1"},
+		{Role: "user", Content: "msg2"},
+		{Role: "assistant", Content: "resp2"},
+	}
+
+	result := SlidingWindow(2).Trim(msgs)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	if result[0].Content != "msg2" {
+		t.Errorf("expected msg2, got %q", result[0].Content)
+	}
+	if result[1].Content != "resp2" {
+		t.Errorf("expected resp2, got %q", result[1].Content)
+	}
+}
+
+func TestSlidingWindow_EmptyMessages(t *testing.T) {
+	result := SlidingWindow(5).Trim(nil)
+	if len(result) != 0 {
+		t.Errorf("expected 0 messages for nil input, got %d", len(result))
+	}
+}
+
+func TestContextStrategyFunc(t *testing.T) {
+	called := false
+	strategy := ContextStrategyFunc(func(msgs []Message) []Message {
+		called = true
+		return msgs
+	})
+
+	msgs := []Message{{Role: "user", Content: "hello"}}
+	result := strategy.Trim(msgs)
+
+	if !called {
+		t.Error("function was not called")
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 message, got %d", len(result))
+	}
+}
+
+func TestDroppedMessages_WithSystemPrompt(t *testing.T) {
+	original := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "old1"},
+		{Role: "assistant", Content: "old2"},
+		{Role: "user", Content: "recent"},
+	}
+	trimmed := []Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "recent"},
+	}
+
+	dropped := droppedMessages(original, trimmed)
+	if len(dropped) != 2 {
+		t.Fatalf("expected 2 dropped, got %d", len(dropped))
+	}
+	if dropped[0].Content != "old1" {
+		t.Errorf("dropped[0] = %q, want old1", dropped[0].Content)
+	}
+	if dropped[1].Content != "old2" {
+		t.Errorf("dropped[1] = %q, want old2", dropped[1].Content)
+	}
+}
+
+func TestDroppedMessages_NoTrimming(t *testing.T) {
+	msgs := []Message{
+		{Role: "user", Content: "hello"},
+	}
+	dropped := droppedMessages(msgs, msgs)
+	if len(dropped) != 0 {
+		t.Errorf("expected 0 dropped when no trimming, got %d", len(dropped))
+	}
+}
