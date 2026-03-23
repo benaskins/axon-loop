@@ -11,6 +11,7 @@ go vet ./...
 
 ## Key Files
 
+- `run.go` — main conversation loop execution (`Run`, `Stream`, `RunConfig`, `Event` types)
+- `context.go` — conversation context management (`ContextStrategy`, `SlidingWindow`, `TokenBudget`)
 - `agent.go` — agent definition and lifecycle
-- `context.go` — conversation context management
-- `run.go` — main conversation loop execution
+- `doc.go` — package documentation
