@@ -1,3 +1,8 @@
+---
+module: github.com/benaskins/axon-loop
+kind: library
+---
+
 # axon-loop
 
 Provider-agnostic conversation loop for LLM-powered agents.
