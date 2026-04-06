@@ -179,7 +179,13 @@ func TestRunPassesToolsToClient(t *testing.T) {
 	}
 
 	tools := map[string]tool.ToolDef{
-		"current_time": tool.CurrentTimeTool(),
+		"echo": {
+			Name:        "echo",
+			Description: "echoes input",
+			Execute: func(_ *tool.ToolContext, args map[string]any) tool.ToolResult {
+				return tool.ToolResult{Content: "ok"}
+			},
+		},
 	}
 
 	_, err := loop.Run(context.Background(), loop.RunConfig{
@@ -198,8 +204,8 @@ func TestRunPassesToolsToClient(t *testing.T) {
 	if len(receivedTools) != 1 {
 		t.Fatalf("expected 1 tool in request, got %d", len(receivedTools))
 	}
-	if receivedTools[0].Name != "current_time" {
-		t.Errorf("tool name = %q, want %q", receivedTools[0].Name, "current_time")
+	if receivedTools[0].Name != "echo" {
+		t.Errorf("tool name = %q, want %q", receivedTools[0].Name, "echo")
 	}
 }
 

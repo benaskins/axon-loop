@@ -2,6 +2,7 @@ package loop
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -123,6 +124,12 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 	var finalContent strings.Builder
 	var finalThinking strings.Builder
 
+	// Repetition guard: detect and break tool call loops.
+	type callKey struct{ name, args string }
+	var lastCall callKey
+	repeatCount := 0
+	const maxRepeats = 3
+
 	// Build tool list from map for the ChatClient
 	var toolDefs []tool.ToolDef
 	for _, td := range tools {
@@ -212,6 +219,27 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 		for _, tc := range toolCalls {
 			if cb.OnToolUse != nil {
 				cb.OnToolUse(tc.Name, tc.Arguments)
+			}
+
+			// Repetition guard: if the same tool+args is called 3+ times
+			// in a row, return an error instead of executing.
+			argsJSON, _ := json.Marshal(tc.Arguments)
+			thisCall := callKey{name: tc.Name, args: string(argsJSON)}
+			if thisCall == lastCall {
+				repeatCount++
+			} else {
+				lastCall = thisCall
+				repeatCount = 1
+			}
+
+			if repeatCount >= maxRepeats {
+				slog.Warn("tool call loop detected", "tool", tc.Name, "repeats", repeatCount)
+				messages = append(messages, Message{
+					Role:       RoleTool,
+					Content:    fmt.Sprintf("Error: %s called %d times in a row with the same arguments. This looks like a loop. Try a different approach or call done.", tc.Name, repeatCount),
+					ToolCallID: tc.ID,
+				})
+				continue
 			}
 
 			if def, ok := tools[tc.Name]; ok {
