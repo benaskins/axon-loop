@@ -250,7 +250,7 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 					ToolCallID: tc.ID,
 				})
 			} else {
-				slog.Warn("unknown tool called", "tool", tc.Name)
+				slog.Warn("unknown tool called", "tool", tc.Name, "args", tc.Arguments)
 				messages = append(messages, Message{
 					Role:       RoleTool,
 					Content:    fmt.Sprintf("Error: unknown tool %q", tc.Name),
