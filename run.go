@@ -124,11 +124,20 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 	var finalContent strings.Builder
 	var finalThinking strings.Builder
 
-	// Repetition guard: detect and break tool call loops.
+	// Repetition guard: detect tool call loops.
+	// Tracks both exact repeats (same tool+args) and pattern repeats
+	// (same tool name called repeatedly, even with different args).
 	type callKey struct{ name, args string }
 	var lastCall callKey
 	repeatCount := 0
 	const maxRepeats = 3
+
+	// Pattern guard: track how many times the same tool name is called
+	// within a sliding window. Catches write/test/write/test loops.
+	toolNameCounts := make(map[string]int)
+	const patternWindow = 10 // look at last N tool calls
+	const patternThreshold = 7 // if same tool called 7/10 times, it's looping
+	var recentTools []string
 
 	// Build tool list from map for the ChatClient
 	var toolDefs []tool.ToolDef
@@ -237,6 +246,27 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 				messages = append(messages, Message{
 					Role:       RoleTool,
 					Content:    fmt.Sprintf("Error: %s called %d times in a row with the same arguments. This looks like a loop. Try a different approach or call done.", tc.Name, repeatCount),
+					ToolCallID: tc.ID,
+				})
+				continue
+			}
+
+			// Pattern guard: detect alternating loops (e.g. write/test/write/test).
+			recentTools = append(recentTools, tc.Name)
+			if len(recentTools) > patternWindow {
+				old := recentTools[0]
+				toolNameCounts[old]--
+				if toolNameCounts[old] <= 0 {
+					delete(toolNameCounts, old)
+				}
+				recentTools = recentTools[1:]
+			}
+			toolNameCounts[tc.Name]++
+			if toolNameCounts[tc.Name] >= patternThreshold {
+				slog.Warn("tool pattern loop detected", "tool", tc.Name, "count", toolNameCounts[tc.Name], "window", patternWindow)
+				messages = append(messages, Message{
+					Role:       RoleTool,
+					Content:    fmt.Sprintf("Error: %s called %d times in the last %d tool calls. You are stuck in a loop. Stop and call done with what you have, or try a completely different approach.", tc.Name, toolNameCounts[tc.Name], patternWindow),
 					ToolCallID: tc.ID,
 				})
 				continue
