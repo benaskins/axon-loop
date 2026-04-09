@@ -50,6 +50,105 @@ func TestRunSimpleChat(t *testing.T) {
 	}
 }
 
+func TestRunUsageAccumulation(t *testing.T) {
+	// Two-turn conversation: tool call then final answer.
+	// Each turn reports Usage on the Done chunk.
+	client := &multiTurnClient{
+		turns: [][]loop.Response{
+			// Turn 1: tool call with usage
+			{
+				{
+					ToolCalls: []loop.ToolCall{
+						{ID: "call_1", Name: "echo", Arguments: map[string]any{"text": "hi"}},
+					},
+					Done: true,
+					Usage: &loop.Usage{
+						InputTokens:              1000,
+						OutputTokens:             200,
+						CacheCreationInputTokens: 50,
+						CacheReadInputTokens:     100,
+					},
+				},
+			},
+			// Turn 2: final answer with usage
+			{
+				{
+					Content: "Done.",
+					Done:    true,
+					Usage: &loop.Usage{
+						InputTokens:              1500,
+						OutputTokens:             300,
+						CacheCreationInputTokens: 0,
+						CacheReadInputTokens:     400,
+					},
+				},
+			},
+		},
+	}
+
+	tools := map[string]tool.ToolDef{
+		"echo": {
+			Name: "echo",
+			Execute: func(ctx *tool.ToolContext, args map[string]any) tool.ToolResult {
+				return tool.ToolResult{Content: "echoed"}
+			},
+		},
+	}
+
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "echo something"}},
+		},
+		Tools:   tools,
+		ToolCtx: &tool.ToolContext{Ctx: context.Background()},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Usage == nil {
+		t.Fatal("Usage is nil, want accumulated usage")
+	}
+	// Should be sum of both turns
+	if result.Usage.InputTokens != 2500 {
+		t.Errorf("InputTokens = %d, want 2500", result.Usage.InputTokens)
+	}
+	if result.Usage.OutputTokens != 500 {
+		t.Errorf("OutputTokens = %d, want 500", result.Usage.OutputTokens)
+	}
+	if result.Usage.CacheCreationInputTokens != 50 {
+		t.Errorf("CacheCreationInputTokens = %d, want 50", result.Usage.CacheCreationInputTokens)
+	}
+	if result.Usage.CacheReadInputTokens != 500 {
+		t.Errorf("CacheReadInputTokens = %d, want 500", result.Usage.CacheReadInputTokens)
+	}
+}
+
+func TestRunUsageNilWhenProviderDoesNotReport(t *testing.T) {
+	client := &stubClient{
+		responses: []loop.Response{
+			{Content: "Hello!", Done: true}, // no Usage field
+		},
+	}
+
+	result, err := loop.Run(context.Background(), loop.RunConfig{
+		Client: client,
+		Request: &loop.Request{
+			Model:    "test",
+			Messages: []loop.Message{{Role: loop.RoleUser, Content: "Hi"}},
+		},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Usage != nil {
+		t.Errorf("Usage = %+v, want nil when provider does not report", result.Usage)
+	}
+}
+
 func TestRunWithToolCall(t *testing.T) {
 	callCount := 0
 	client := &multiTurnClient{

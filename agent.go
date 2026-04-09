@@ -13,6 +13,7 @@ type (
 	ToolCall = talk.ToolCall
 	Request  = talk.Request
 	Response = talk.Response
+	Usage    = talk.Usage
 
 	LLMClient = talk.LLMClient
 )

@@ -26,6 +26,7 @@ type Callbacks struct {
 type Result struct {
 	Content  string
 	Thinking string
+	Usage    *Usage // accumulated token usage across all turns; nil if provider doesn't report
 }
 
 // RunConfig bundles parameters for Run, keeping the function signature small.
@@ -123,6 +124,7 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 
 	var finalContent strings.Builder
 	var finalThinking strings.Builder
+	var accumulatedUsage *Usage
 
 	// Repetition guard: detect and break tool call loops.
 	// Exact same tool+args 3 times in a row returns an error to the model.
@@ -187,6 +189,17 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 
 			if len(resp.ToolCalls) > 0 {
 				toolCalls = append(toolCalls, resp.ToolCalls...)
+			}
+
+			// Accumulate token usage from provider (arrives on Done chunk).
+			if resp.Usage != nil {
+				if accumulatedUsage == nil {
+					accumulatedUsage = &Usage{}
+				}
+				accumulatedUsage.InputTokens += resp.Usage.InputTokens
+				accumulatedUsage.OutputTokens += resp.Usage.OutputTokens
+				accumulatedUsage.CacheCreationInputTokens += resp.Usage.CacheCreationInputTokens
+				accumulatedUsage.CacheReadInputTokens += resp.Usage.CacheReadInputTokens
 			}
 
 			return nil
@@ -275,6 +288,7 @@ func Run(ctx context.Context, cfg RunConfig) (*Result, error) {
 	return &Result{
 		Content:  finalContent.String(),
 		Thinking: finalThinking.String(),
+		Usage:    accumulatedUsage,
 	}, nil
 }
 
