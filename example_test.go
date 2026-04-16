@@ -23,6 +23,9 @@ func ExampleSlidingWindow() {
 	trimmed := strategy.Trim(messages)
 	fmt.Println(trimmed[0].Role, "message preserved")
 	fmt.Println(len(trimmed)-1, "conversation messages kept")
+	// Output:
+	// system message preserved
+	// 3 conversation messages kept
 }
 
 // A token budget trims older messages so the total estimated token count
@@ -36,7 +39,9 @@ func ExampleTokenBudget() {
 	}
 
 	trimmed := strategy.Trim(messages)
-	_ = trimmed // pass to RunConfig.Context
+	fmt.Println(len(trimmed), "messages after trim")
+	// Output:
+	// 2 messages after trim
 }
 
 // RunConfig assembles everything needed for a conversation loop: an LLM
